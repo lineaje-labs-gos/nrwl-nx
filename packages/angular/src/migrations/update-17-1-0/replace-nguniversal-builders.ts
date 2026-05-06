@@ -8,6 +8,10 @@ import {
   type Tree,
   removeDependenciesFromPackageJson,
 } from '@nx/devkit';
+import {
+  downgradeTargetDefaults,
+  normalizeTargetDefaults,
+} from '@nx/devkit/internal';
 
 export default async function (tree: Tree) {
   const projects = getProjects(tree);
@@ -34,61 +38,21 @@ export default async function (tree: Tree) {
     return;
   }
 
-  const replaceExecutor = (
-    entry: { executor?: string },
-    oldExec: string,
-    newExec: string
-  ): boolean => {
-    if (entry.executor === oldExec) {
-      entry.executor = newExec;
-      return true;
-    }
-    return false;
-  };
-
-  if (Array.isArray(nxJson.targetDefaults)) {
-    for (const entry of nxJson.targetDefaults) {
-      if (
-        replaceExecutor(
-          entry,
-          '@nguniversal/builders:ssr-dev-server',
-          '@angular-devkit/build-angular:ssr-dev-server'
-        )
-      ) {
-        // no-op for executor-only changes
-      } else if (
-        replaceExecutor(
-          entry,
-          '@nguniversal/builders:prerender',
-          '@angular-devkit/build-angular:prerender'
-        )
-      ) {
-        updatePrerenderOptions(entry);
-      }
-    }
-  } else {
-    for (const [targetOrExecutor, targetConfig] of Object.entries(
-      nxJson.targetDefaults
-    )) {
-      if (targetOrExecutor === '@nguniversal/builders:ssr-dev-server') {
-        nxJson.targetDefaults['@angular-devkit/build-angular:ssr-dev-server'] =
-          targetConfig;
-        delete nxJson.targetDefaults['@nguniversal/builders:ssr-dev-server'];
-      } else if (targetOrExecutor === '@nguniversal/builders:prerender') {
-        nxJson.targetDefaults['@angular-devkit/build-angular:prerender'] =
-          targetConfig;
-        delete nxJson.targetDefaults['@nguniversal/builders:prerender'];
-        updatePrerenderOptions(targetConfig);
-      } else if (
-        targetConfig.executor === '@nguniversal/builders:ssr-dev-server'
-      ) {
-        targetConfig.executor = '@angular-devkit/build-angular:ssr-dev-server';
-      } else if (targetConfig.executor === '@nguniversal/builders:prerender') {
-        targetConfig.executor = '@angular-devkit/build-angular:prerender';
-        updatePrerenderOptions(targetConfig);
-      }
+  const original = nxJson.targetDefaults;
+  const entries = normalizeTargetDefaults(original);
+  for (const entry of entries) {
+    if (entry.executor === '@nguniversal/builders:ssr-dev-server') {
+      entry.executor = '@angular-devkit/build-angular:ssr-dev-server';
+    } else if (entry.executor === '@nguniversal/builders:prerender') {
+      entry.executor = '@angular-devkit/build-angular:prerender';
+      updatePrerenderOptions(entry);
     }
   }
+  // Preserve the original on-disk shape so a record-shape nx.json stays
+  // valid against pre-v23 schemas; normalized array writes back as array.
+  nxJson.targetDefaults = Array.isArray(original)
+    ? entries
+    : downgradeTargetDefaults(entries);
 
   updateNxJson(tree, nxJson);
 

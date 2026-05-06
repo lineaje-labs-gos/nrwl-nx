@@ -1,4 +1,8 @@
-import { forEachExecutorOptions } from '@nx/devkit/internal';
+import {
+  downgradeTargetDefaults,
+  forEachExecutorOptions,
+  normalizeTargetDefaults,
+} from '@nx/devkit/internal';
 import {
   formatFiles,
   readNxJson,
@@ -39,24 +43,31 @@ export default async function (tree: Tree) {
     return;
   }
 
-  for (const [targetOrExecutor, targetConfig] of Object.entries(
-    nxJson.targetDefaults
-  )) {
+  const original = nxJson.targetDefaults;
+  const entries = normalizeTargetDefaults(original);
+  for (const entry of entries) {
+    // Match either the legacy `target`-as-executor key (an executor
+    // identifier in the `target` slot) or an explicit `executor` field.
     if (
-      !executors.includes(targetOrExecutor) &&
-      !executors.includes(targetConfig.executor)
+      !executors.includes(entry.target) &&
+      !executors.includes(entry.executor)
     ) {
       continue;
     }
 
-    if (targetConfig.options) {
-      updateConfig(targetConfig.options);
+    if (entry.options) {
+      updateConfig(entry.options);
     }
 
-    Object.values(targetConfig.configurations ?? {}).forEach((config) => {
+    Object.values(entry.configurations ?? {}).forEach((config) => {
       updateConfig(config);
     });
   }
+  // Preserve the original on-disk shape so a record-shape nx.json stays
+  // valid against pre-v23 schemas; normalized array writes back as array.
+  nxJson.targetDefaults = Array.isArray(original)
+    ? entries
+    : downgradeTargetDefaults(entries);
 
   updateNxJson(tree, nxJson);
 

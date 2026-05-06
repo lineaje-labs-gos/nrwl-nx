@@ -40,7 +40,10 @@ export {
   findTargetDefault,
   upsertTargetDefault,
 } from './src/generators/target-defaults-utils';
-export { normalizeTargetDefaults } from './src/utils/normalize-target-defaults';
+export {
+  downgradeTargetDefaults,
+  normalizeTargetDefaults,
+} from './src/utils/normalize-target-defaults';
 
 // Utils
 export { addPlugin } from './src/utils/add-plugin';

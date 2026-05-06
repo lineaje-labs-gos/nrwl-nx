@@ -6,6 +6,10 @@ import {
   updateProjectConfiguration,
   type Tree,
 } from '@nx/devkit';
+import {
+  downgradeTargetDefaults,
+  normalizeTargetDefaults,
+} from '@nx/devkit/internal';
 
 export default async function (tree: Tree) {
   const projects = getProjects(tree);
@@ -32,33 +36,21 @@ export default async function (tree: Tree) {
     return;
   }
 
-  if (Array.isArray(nxJson.targetDefaults)) {
-    for (const entry of nxJson.targetDefaults) {
-      if (
-        entry.executor === '@nx/angular:webpack-dev-server' ||
-        entry.executor === '@nrwl/angular:webpack-dev-server'
-      ) {
-        entry.executor = '@nx/angular:dev-server';
-      }
-    }
-  } else {
-    for (const [targetOrExecutor, targetConfig] of Object.entries(
-      nxJson.targetDefaults
-    )) {
-      if (targetOrExecutor === '@nx/angular:webpack-dev-server') {
-        nxJson.targetDefaults['@nx/angular:dev-server'] = targetConfig;
-        delete nxJson.targetDefaults['@nx/angular:webpack-dev-server'];
-      } else if (targetOrExecutor === '@nrwl/angular:webpack-dev-server') {
-        nxJson.targetDefaults['@nx/angular:dev-server'] = targetConfig;
-        delete nxJson.targetDefaults['@nrwl/angular:webpack-dev-server'];
-      } else if (
-        targetConfig.executor === '@nx/angular:webpack-dev-server' ||
-        targetConfig.executor === '@nrwl/angular:webpack-dev-server'
-      ) {
-        targetConfig.executor = '@nx/angular:dev-server';
-      }
+  const original = nxJson.targetDefaults;
+  const entries = normalizeTargetDefaults(original);
+  for (const entry of entries) {
+    if (
+      entry.executor === '@nx/angular:webpack-dev-server' ||
+      entry.executor === '@nrwl/angular:webpack-dev-server'
+    ) {
+      entry.executor = '@nx/angular:dev-server';
     }
   }
+  // Preserve the original on-disk shape so a record-shape nx.json stays
+  // valid against pre-v23 schemas; normalized array writes back as array.
+  nxJson.targetDefaults = Array.isArray(original)
+    ? entries
+    : downgradeTargetDefaults(entries);
 
   updateNxJson(tree, nxJson);
 
